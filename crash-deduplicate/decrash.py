@@ -38,7 +38,9 @@ def input_parser():
 
 
 def uniq_crash_determine():
-    lines = open(log_file, 'r').readlines()
+    f = open(log_file, 'r').readlines()
+    lines = f,redalines()
+    f.close()
     new_lines =[]
     for i in range(0, len(lines)):
         if(lines[i][0] == '#'):

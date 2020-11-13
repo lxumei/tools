@@ -5,6 +5,7 @@
 #include<assert.h>
 #include<sys/stat.h>
 #include<fcntl.h>
+#include<string.h>
 
 void env(){
     printf("HOME path; %s\n", getenv("HOME"));
@@ -103,9 +104,12 @@ void local_global_variable_change(){
         g1 += 5;
         l1 += 5;
         *a += 5;
-        char buf[3];
+        char buf[10];
+        memset(buf, 0, 10);
+        //printf("%d\n",  lseek(fd, 0, SEEK_CUR));
         lseek(fd, 0, SEEK_SET);
         read(fd, (char*)buf, sizeof(buf));
+        //buf[sizeof(buf)-1] = '\0';
         printf("This is parent process, g1 = %d, l1 = %d, *a = %d\n", g1, l1, *a);
         printf("%s",buf);
         close(fd);
