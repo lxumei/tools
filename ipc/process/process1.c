@@ -96,7 +96,8 @@ void local_global_variable_change(){
         g1 += 5;
         l1 += 5;
         *a += 5;
-        write(fd, str, 3);
+        write(fd, str, 7);
+        printf("%d\n",  lseek(fd, 0, SEEK_CUR));
         printf("This is child process, g1 = %d, l1 = %d, *a = %d\n", g1, l1, *a);
     }
     else{
@@ -106,7 +107,7 @@ void local_global_variable_change(){
         *a += 5;
         char buf[10];
         memset(buf, 0, 10);
-        //printf("%d\n",  lseek(fd, 0, SEEK_CUR));
+        printf("%d\n",  lseek(fd, 0, SEEK_CUR));
         lseek(fd, 0, SEEK_SET);
         read(fd, (char*)buf, sizeof(buf));
         //buf[sizeof(buf)-1] = '\0';
@@ -116,9 +117,40 @@ void local_global_variable_change(){
     }
 }
 
+
+/* Two process open the same file */
+void two_process_open_file(){
+
+    int fd = open("a.txt", O_RDWR|O_CREAT, 0664);
+    pid_t pid = fork();
+    if(pid < 0){
+        perror("fork failed\n");
+        exit(1);
+    }
+    else if(pid == 0){
+        printf("This is child process.\n");
+        char str[] = {'h','e','l', 'l','o','w','\n'};
+        write(fd, str, 7);
+        printf("%d\n",  lseek(fd, 0, SEEK_CUR));
+        close(fd);
+        fd = open("a.txt", O_RDWR|O_CREAT, 0664);
+        printf("%d\n",  lseek(fd, 0, SEEK_CUR));
+    }
+    else{
+        sleep(1);
+        printf("This is parent process.\n");
+        printf("%d\n",  lseek(fd, 0, SEEK_CUR));
+        printf("%d\n",  fd);
+        char str1[] = {'h','e','l', 'l','o','1','\n'};
+        int ret = write(fd, str1, 7);
+        printf("%d\n", ret);
+    }
+}
+
 int main(){
     //get_p_ppid();
     //create_n_child_process();
-    local_global_variable_change();
+    //local_global_variable_change();
+    two_process_open_file();
     return 0;
 }
