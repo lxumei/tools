@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <ctype.h>
 
 /* Misc manifest constants */
 #define MAXLINE    1024   /* max line size */
@@ -169,33 +170,44 @@ void eval(char *cmdline)
     char *argv[MAXARGS];
     int bg;
     pid_t pid;
-    sigset_t mask, prev;
+    sigset_t mask_all, mask_one, prev_one;
 
+    //printf("before: bg = 0, cmdline = %s", cmdline);
     strcpy(buf, cmdline);
+
     bg = parseline(buf, argv);
+
     if(argv[0] == NULL)
         return;
 
-    if(!builtin_cmd(argv)){
-        sigemptyset(&mask);
-        sigaddset(&mask, SIGCHLD);
-        sigprocmask(SIG_BLOCK, &mask, &prev);
+    sigfillset(&mask_all);
+    sigemptyset(&mask_one);
+    sigaddset(&mask_one, SIGCHLD);
+
+    if(!builtin_cmd(argv)){                                 /* if not builtin command */
+
+        sigprocmask(SIG_BLOCK, &mask_one, &prev_one);       /* block SIGCHLD in parent process */
 
         if((pid = fork()) == 0){
-            sigprocmask(SIG_SETMASK, &prev, NULL);
-            setpgid(0,0);
-
+            sigprocmask(SIG_SETMASK, &prev_one, NULL);      /* unblock SIGCHILD in child process */
+            if(setpgid(0,0) < 0)
+                unix_error("eval: setgpid failed.\n");
             if(execve(argv[0], argv, environ) < 0){
                 printf("%s: Command not found.\n", argv[0]);
                 exit(0);
             }
         }
-        
+       
+        sigprocmask(SIG_BLOCK, &mask_all, NULL);            /* block all signal in parent process */
         addjob(jobs, pid, bg?BG:FG, cmdline);
-        sigprocmask(SIG_SETMASK, &prev, NULL);
-
+        sigprocmask(SIG_SETMASK, &prev_one, NULL);          /* recover mask with prev_one */
+        
+        if(bg)
+            printf("[%d] (%d)  %s", pid2jid(pid), pid, cmdline);     /* bg, do not wait */   
+        else
+            waitfg(pid);                                             /* fg, wait */
     }
-    
+
     return;
 }
 
@@ -290,9 +302,10 @@ void do_bgfg(char **argv)
     char *tmp = argv[1];
     struct job_t *job;
     pid_t jid, pid;
+    //printf("jid or pid = %s in do_bgfg()\n", tmp);
 
     if(tmp == NULL){
-        printf("%s command requires PID or %%jobjd\n", argv[0]);
+        printf("%s command requires PID or %%jobid\n", argv[0]);
         return;
     }
 
@@ -303,19 +316,28 @@ void do_bgfg(char **argv)
             printf("%%%d: No such job\n", jid);
             return;
         }
-        kill(job->pid, SIGCONT);
-        job->state = BG;
-    }       
-    else{
+    }
+    else if(isdigit(tmp[0])){
         pid = atoi(tmp);
         job = getjobpid(jobs, pid);
         if(job == NULL){
-            printf("%d: No such process\n", pid);
+            printf("%%%d: No such job\n", pid);
             return;
         }
-        kill(job->pid, SIGCONT);
+    }else{
+        printf("rgument must be a PID or %%jobid\n");
+        return;
+    }
+
+    kill(-(job->pid), SIGCONT);
+
+    if(!strcmp(argv[0], "bg")){
+        job->state = BG;
+        printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
+    }
+    else{
         job->state = FG;
-        waitfg(pid);
+        waitfg(job->pid);
     }
 
     return;
@@ -347,8 +369,9 @@ void sigchld_handler(int sig)
 {
     pid_t pid;
     int status;
+    int olderrno = errno;
     while((pid = waitpid(-1, &status, WNOHANG|WUNTRACED))>0){
-        if(WIFEXITED(status)){
+        if(WIFEXITED(status)){    /* child process terminate normally */
             deletejob(jobs, pid);
         }
         if(WIFSIGNALED(status)){
@@ -362,9 +385,7 @@ void sigchld_handler(int sig)
                 job->state = ST;
         }
     }
-    if(errno != ECHILD)
-        unix_error("waitpid error");
-
+    errno = olderrno;
     return;
 }
 
