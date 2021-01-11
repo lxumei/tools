@@ -1,0 +1,162 @@
+#include<iostream>
+#include<vector>
+#include<stack>
+#include<map>
+using namespace std;
+
+int res_flag = false;
+vector<int> cur_nums;
+vector<char> cur_ops;
+char op[] = {'+', '-', '*', '/'};
+
+int to_number(char c){
+    if(c >= '2' && c <= '9')
+        return c - '0';
+    if(c == 'A')
+        return 1;
+    if(c == 'J')
+        return 11;
+    if(c == 'Q')
+        return 12;
+    if(c == 'K')
+        return 13;
+    
+    return -1;
+}
+
+
+int cal_exp(int num1, int num2, char c){
+    int res = 0;
+    switch (c){
+        case '+':
+            res = num1 + num2;
+            break;
+        case '-':
+            res = num1 - num2;
+            break;
+        case '*':
+            res = num1 * num2;
+            break;
+        case '/':
+            res = num1 / num2;
+            break;
+    }
+
+    return res;
+}
+
+void cal(){
+    map<char, int> mp;
+    mp['$'] = -1;
+    mp['+'] = 0;
+    mp['-'] = 0;
+    mp['*'] = 1;
+    mp['/'] = 1;
+    
+    int i = 1, j = 0;
+    stack<int> s;
+    stack<char> chr;
+    s.push(cur_nums[0]);
+    chr.push('$');
+    while(i < 4 && j < 3){
+        char c = cur_ops[j];
+        if(mp[c] > mp[chr.top()])
+            chr.push(c);
+        else{
+            while(mp[c] <= mp[chr.top()]){
+                int num2 = s.top();
+                s.pop();
+                int num1 = s.top();
+                s.pop();
+                s.push(cal_exp(num1, num2, chr.top()));
+                chr.pop();
+            }
+            chr.push(c);
+        }
+        
+        s.push(cur_nums[i]);
+        i++;
+        j++;
+    }
+    
+    while(chr.top() != '$'){
+        int num2 = s.top();
+        s.pop();
+        int num1 = s.top();
+        s.pop();
+        s.push(cal_exp(num1, num2, chr.top()));
+        chr.pop();
+    }
+    
+    if(s.top() == 24){
+        res_flag = true;
+        cout<<cur_nums[0]<<cur_ops[0]<<cur_nums[1]<<cur_ops[1]<<cur_nums[2]<<cur_ops[2]<<cur_nums[3]<<endl;
+    }
+}
+
+void dfs_op(int index){
+    if(index == 3){
+        cal();
+        return;
+    }
+    
+    for(int i = 0; i < 4; i++){
+        if(res_flag == true)
+            return;
+        cur_ops.push_back(op[i]);
+        dfs_op(index + 1);
+        cur_ops.pop_back();
+    }
+}
+
+void dfs(int index, int *nums, bool *visited){
+    if(index == 4){
+        dfs_op(0);
+        return;
+    }
+    
+    for(int i = 0; i < 4; i++){
+        if(res_flag == true)
+            return;
+        if(visited[i] == false){
+            visited[i] = true;
+            cur_nums.push_back(nums[i]);
+            dfs(index + 1, nums, visited);
+            cur_nums.pop_back();
+            visited[i] = false;
+        }
+    }
+}
+
+int main(){
+    string str;
+
+    while(getline(cin, str)){
+        int nums[4], cur = 0;
+        bool visited[4] = {false};
+        cur_nums.clear();
+        cur_ops.clear();
+        res_flag = false;
+        
+        if(str.find('o') != -1 || str.find('O') != -1){
+            cout<<"ERROR"<<endl;
+            break;
+        }
+        
+        for(int i = 0; i < str.length(); i++){
+            if(str[i] == ' ')
+                continue;
+            if(str[i] == '1'){
+                nums[cur++] = 10;
+                i++;
+            }else
+                nums[cur++] = to_number(str[i]);
+        }
+        
+        dfs(0, nums, visited);
+        if(res_flag == false){
+            cout<<"NONE"<<endl;
+        }
+    }
+    return 0;
+}
