@@ -2,3 +2,4 @@ peda*
 .gdb*
 a.out
 a.txt
+*.out
