@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+import sys
+import os
+import struct
+import argparse
+import binascii
+import struct
+
+class Elf:
+    def __init__(self, filename):
+        self.filename = filename
+        self.read_elf()
+        self.header_parser()
+        self.program_header_parser()
+
+    def read_elf(self):
+        f = open(self.filename, 'rb')
+        self.data = f.read()
+        f.close()
+
+    def header_parser(self):
+        self.e_ident = self.data[0:16]
+        self.e_class = self.data[4]
+        if(self.e_ident[0:4] != b"\x7fELF" or (self.e_class != 1 and self.e_class != 2)):
+            raise Exception("invalid elf file")
+
+        if(self.e_ident[4] == 1):
+            self.bits = "ELF32"
+        else:
+            self.bits = "ELF64"
+            
+        if self.e_ident[5] not in [1,2]:
+            raise Exception("Invalid data encoding!")
+
+        if self.e_ident[6] != 1:
+            raise Exception("Invalid Version!")
+
+        self.e_type = {}
+        self.e_type[b'\x00\x00'] = 'ET_NONE'
+        self.e_type[b'\x01\x00'] = 'ET_REL'
+        self.e_type[b'\x02\x00'] = 'ET_EXEC'
+        self.e_type[b'\x03\x00'] = 'ET_DYN'
+        self.e_type[b'\x04\x00'] = 'ET_CORE'
+        self.e_type[b'\x00\xfe'] = 'ET_LOOS'
+        self.e_type[b'\xff\xfe'] = 'ET_HIOS'
+        self.e_type[b'\x00\xff'] = 'ET_LOPROC'
+        self.e_type[b'\xff\xff'] = 'ET_HIPROC'
+        if self.data[16:18] not in self.e_type:
+            raise Exception("Invalid Type!")
+
+        self.e_machine = {}
+        self.e_machine[b'\x00\x00'] = 'No specific instruction set'
+        self.e_machine[b'\x01\x00'] = 'AT&T WE 32100'
+        self.e_machine[b'\x02\x00'] = 'SPARC'
+        self.e_machine[b'\x03\x00'] = 'x86'
+        self.e_machine[b'\x04\x00'] = 'Motorola 68000 (M68k)'
+        self.e_machine[b'\x05\x00'] = 'Motorola 88000 (M88k)'
+        self.e_machine[b'\x06\x00'] = 'Intel MCU'
+        self.e_machine[b'\x07\x00'] = 'Intel 80860'
+        self.e_machine[b'\x08\x00'] = 'MIPS'
+        self.e_machine[b'\x09\x00'] = 'IBM_System/370'
+        self.e_machine[b'\x0A\x00'] = 'MIPS RS3000 Little-endian'
+        self.e_machine[b'\x0B\x00'] = 'Reserved for future use'
+        self.e_machine[b'\x0C\x00'] = 'Reserved for future use'
+        self.e_machine[b'\x0D\x00'] = 'Reserved for future use'
+        self.e_machine[b'\x0E\x00'] = 'Hewlett-Packard PA-RISC'
+        self.e_machine[b'\x0F\x00'] = 'Reserved for future use'
+        self.e_machine[b'\x13\x00'] = 'Intel 80960'
+        self.e_machine[b'\x14\x00'] = 'PowerPC'
+        self.e_machine[b'\x15\x00'] = 'PowerPC (64-bit)'
+        self.e_machine[b'\x16\x00'] = 'S390, including S390x'
+        self.e_machine[b'\x28\x00'] = 'ARM (up to ARMv7/Aarch32)'
+        self.e_machine[b'\x2A\x00'] = 'SuperH'
+        self.e_machine[b'\x32\x00'] = 'IA-64'
+        self.e_machine[b'\x3E\x00'] = 'amd64'
+        self.e_machine[b'\x8C\x00'] = 'TMS320C6000 Family'
+        self.e_machine[b'\xB7\x00'] = 'ARM 64-bits (ARMv8/Aarch64)'
+        self.e_machine[b'\xF3\x00'] = 'RISC-V'
+        self.e_machine[b'\xF7\x00'] = 'Berkeley Packet Filter'
+        self.e_machine[b'\x01\x01'] = 'WDC 65C816'
+        if self.data[18:20] not in self.e_machine:
+            raise Exception("%s: Invalid Machine!" % binascii.hexlify(self.data[18:20]))
+        
+        if self.e_ident[4] == 1:
+            self.e_entry = struct.unpack('<l', self.data[24:28])[0]
+            self.e_phoff = struct.unpack('<l', self.data[28:32])[0]
+            self.e_shoff = struct.unpack('<l', self.data[32:36])[0]
+            self.e_flags = struct.unpack('<l', self.data[36:40])[0]
+            self.e_ehsize = struct.unpack('<H', self.data[40:42])[0]
+            self.e_phentsize = struct.unpack('<H', self.data[42:44])[0]
+            self.e_phnum = struct.unpack('<H', self.data[44:46])[0]
+            self.e_shentsize = struct.unpack('<H', self.data[46:48])[0]
+            self.e_shnum = struct.unpack('<H', self.data[48:50])[0]
+            self.e_shstrndx = struct.unpack('<H', self.data[50:52])[0]
+        else:
+            self.e_entry = struct.unpack('<Q', self.data[24:32])[0]
+            self.e_phoff = struct.unpack('<Q', self.data[32:40])[0]
+            self.e_shoff = struct.unpack('<Q', self.data[40:48])[0]
+            self.e_flags = struct.unpack('<l', self.data[48:52])[0]
+            self.e_ehsize = struct.unpack('<H', self.data[52:54])[0]
+            self.e_phentsize = struct.unpack('<H', self.data[54:56])[0]
+            self.e_phnum = struct.unpack('<H', self.data[56:58])[0]
+            self.e_shentsize = struct.unpack('<H', self.data[58:60])[0]
+            self.e_shnum = struct.unpack('<H', self.data[60:62])[0]
+            self.e_shstrndx = struct.unpack('<H', self.data[62:64])[0]
+
+
+    def header_print(self):
+        res = ""
+        res += "ELF Header:\n"
+        res += "    Magic: "
+        for ch in self.e_ident:
+            res += "%02x "%ch
+        res += "\n"
+
+        res += "    Class: ".ljust(40)
+        res += self.bits + "\n"
+
+        res += "    Data: ".ljust(40)
+        if(self.e_ident[5] == 1):
+            res += "2's complement, little endian\n"
+        else:
+            res += "2's complement, big endian\n"
+
+        res += "    Versoin: ".ljust(40)
+        res += str(self.e_ident[6]) + "\n"
+
+        res += "    Type: ".ljust(40)
+        res += self.e_type[self.data[16:18]] + "\n"
+
+        res += "    Machine: ".ljust(40)
+        res += self.e_machine[self.data[18:20]] + "\n"
+
+        res += "    Entry point address: ".ljust(40)
+        res += "0x%x\n" % self.e_entry
+
+        res += "    Start of program headers: ".ljust(40)
+        res += "%d (bytes into file)\n" % self.e_phoff
+
+        res += "    Start of section headers: ".ljust(40)
+        res += "%d (bytes into file)\n" % self.e_shoff
+
+        res += "    Flags: ".ljust(40)
+        res += "%d\n" % self.e_flags
+
+        res += "    Size of this header: ".ljust(40)
+        res += "%d (bytes)\n" % self.e_ehsize
+
+        res += "    Size of program headers: ".ljust(40)
+        res += "%d (bytes)\n" % self.e_phentsize
+
+        res += "    Number of program headers: ".ljust(40)
+        res += "%d\n" % self.e_phnum
+
+        res += "    Size of section headers: ".ljust(40)
+        res += "%d (bytes)\n" % self.e_shentsize
+
+        res += "    Number of section headers: ".ljust(40)
+        res += "%d\n" % self.e_shnum
+
+        res += "    Section header string table index: ".ljust(40)
+        res += "%d\n" % self.e_shstrndx
+
+        print(res)
+
+    def program_header_parser(self):
+        self.program_header_list = []
+
+        if self.e_ident[4] == 1:
+            step = 0x20
+        else:
+            step = 0x38
+
+        start = self.e_phoff
+        count = 0
+        while count < self.e_phnum:
+            type_number = self.data[start:start+4]
+
+            p_type = ''
+            if type_number == b'\x00\x00\x00\x00':
+                break
+            elif type_number == b'\x01\x00\x00\x00':
+                p_type = 'LOAD'
+            elif type_number == b'\x02\x00\x00\x00':
+                p_type = 'DYNAMIC'
+            elif type_number == b'\x03\x00\x00\x00':
+                p_type = 'INTERP'
+            elif type_number == b'\x04\x00\x00\x00':
+                p_type = 'NOTE'
+            elif type_number == b'\x05\x00\x00\x00':
+                p_type = 'SHLIB'
+            elif type_number == b'\x06\x00\x00\x00':
+                p_type = 'PHDR'
+            elif type_number == b'\x07\x00\x00\x00':
+                p_type = 'TLS'
+            elif type_number == b'\x00\x00\x00\x60':
+                p_type = 'LOOS'
+            elif type_number == b'\xFF\xFF\xFF\x6F':
+                p_type = 'HIOS'
+            elif type_number == b'\x00\x00\x00\x70':
+                p_type = 'LOPROC'
+            elif type_number == b'\xFF\xFF\xFF\x7F':
+                p_type = 'HIPROC'
+            elif type_number == b'\x50\xE5\x74\x64':
+                p_type = 'PT_GNU_EH_FRAME'
+            elif type_number == b'\x51\xE5\x74\x64':
+                p_type = 'PT_GNU_STACK'
+            elif type_number == b'\x52\xE5\x74\x64':
+                p_type = 'PT_GNU_RELRO'
+            else:
+                raise Exception("0x%x Couldn't resovle this type!" % struct.unpack('<l', type_number)[0])
+
+            if self.e_ident[4] == 1:
+                flags = struct.unpack('<l', self.data[start + 0x18 : start + 0x18 + 4])[0]
+                offset = struct.unpack('<l', self.data[start + 0x4 : start + 0x4 + 4])[0]
+                vaddr = struct.unpack('<l', self.data[start + 0x8 : start + 0x8 + 4])[0]
+                paddr = struct.unpack('<l', self.data[start + 0xc : start + 0xc + 4])[0]
+                filesz = struct.unpack('<l', self.data[start + 0x10 : start + 0x10 + 4])[0]
+                memsz = struct.unpack('<l', self.data[start + 0x14 : start + 0x14 + 4])[0]
+                align = struct.unpack('<l', self.data[start + 0x1c : start + 0x1c + 4])[0]
+            else:
+                flags = struct.unpack('<l', self.data[start + 0x4 : start + 0x4 + 4])[0]
+                offset = struct.unpack('<Q', self.data[start + 0x8 : start + 0x8 + 8])[0]
+                vaddr = struct.unpack('<Q', self.data[start + 0x10 : start + 0x10 + 8])[0]
+                paddr = struct.unpack('<Q', self.data[start + 0x18 : start + 0x18 + 8])[0]
+                filesz = struct.unpack('<Q', self.data[start + 0x20 : start + 0x20 + 8])[0]
+                memsz = struct.unpack('<Q', self.data[start + 0x28 : start + 0x28 + 8])[0]
+                align = struct.unpack('<Q', self.data[start + 0x30 : start + 0x30 + 8])[0]
+
+            self.program_header_list.append({"p_type": p_type, "p_flags":flags, "p_offset":offset,
+                                        "p_vaddr":vaddr, "p_paddr":paddr, "p_filesz":filesz,
+                                        "p_memsz":memsz, "p_align":align})
+            start = start + step
+            count = count + 1
+    
+    def program_header_print(self):
+        print('Program Headers:')
+        print(' Type'.ljust(20) + 'Offset'.ljust(20) + 'VirAddr'.ljust(20) + 'PhysAddr'.ljust(20))
+        print(''.ljust(20) + 'FileSize'.ljust(20) + 'MemSize'.ljust(20) + 'Flags'.ljust(10) + 'Align'.ljust(10))
+
+        for cur in self.program_header_list:
+            print(' ' + cur["p_type"].ljust(19) + ('0x%016x' % cur["p_offset"]).ljust(20) + ('0x%016x' % cur["p_vaddr"]).ljust(20)
+                    + ('0x%016x' % cur["p_paddr"]).ljust(20))
+            print(''.ljust(20) +  ('0x%016x' % cur["p_filesz"]).ljust(20) + ('0x%016x' % cur["p_memsz"]).ljust(20) + 
+                  ('0x%x'%cur["p_flags"]).ljust(10) + '0x%x'%cur["p_align"])
+
+def main():
+    parser = argparse.ArgumentParser(prog = "myreadelf")
+    parser.add_argument('-H', action = 'store_true', default = False)
+    parser.add_argument('-S', action = 'store_true', default = False)
+    parser.add_argument('filename')
+    args = parser.parse_args()
+
+    elf_object = Elf(args.filename) 
+
+    if(args.H):
+        elf_object.header_print()
+    elf_object.program_header_print()
+
+if __name__ == "__main__":
+    main()
