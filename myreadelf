@@ -12,6 +12,8 @@ class Elf:
         self.read_elf()
         self.header_parser()
         self.program_header_parser()
+        self.section_header_parser()
+        self.dynamic_section_parser()
 
     def read_elf(self):
         f = open(self.filename, 'rb')
@@ -243,11 +245,273 @@ class Elf:
                     + ('0x%016x' % cur["p_paddr"]).ljust(20))
             print(''.ljust(20) +  ('0x%016x' % cur["p_filesz"]).ljust(20) + ('0x%016x' % cur["p_memsz"]).ljust(20) + 
                   ('0x%x'%cur["p_flags"]).ljust(10) + '0x%x'%cur["p_align"])
+    
+    def section_header_parser(self):
+        self.section_header_list = []
+
+        if self.e_ident[4] == 1:
+            step = 0x28
+        else:
+            step = 0x40
+
+        start = self.e_shoff
+        count = 0
+
+        if self.e_ident[4] == 1:
+            shstrtab = struct.unpack('<l', self.data[start + step * self.e_shstrndx + 0x10 : start + step * self.e_shstrndx + 0x10 + 4])[0]
+        else:
+            shstrtab = struct.unpack('<Q', self.data[start + step * self.e_shstrndx + 0x18 : start + step * self.e_shstrndx + 0x18 + 8])[0]
+
+        while count < self.e_shnum:
+            s_name = struct.unpack('<l', self.data[start:start+4])[0]
+            s_type = struct.unpack('<l', self.data[start+4:start+8])[0]
+            if s_type == 0x0:
+                sh_type = 'NULL'
+            elif s_type == 0x1:
+                sh_type = 'PROGBITS'
+            elif s_type == 0x2:
+                sh_type = 'SYMTAB'
+            elif s_type == 0x3:
+                sh_type = 'STRTAB'
+            elif s_type == 0x3:
+                sh_type = 'STRTAB'
+            elif s_type == 0x4:
+                sh_type = 'RELA'
+            elif s_type == 0x5:
+                sh_type = 'HASH'
+            elif s_type == 0x6:
+                sh_type = 'DYNAMIC'
+            elif s_type == 0x7:
+                sh_type = 'NOTE'
+            elif s_type == 0x8:
+                sh_type = 'NOBITS'
+            elif s_type == 0x9:
+                sh_type = 'REL'
+            elif s_type == 0xA:
+                sh_type = 'SHLIB'
+            elif s_type == 0xB:
+                sh_type = 'DYNSYM'
+            elif s_type == 0xE:
+                sh_type = 'INIT_ARRAY'
+            elif s_type == 0xF:
+                sh_type = 'FINI_ARRAY'
+            elif s_type == 0x10:
+                sh_type = 'PREINIT_ARRAY'
+            elif s_type == 0x11:
+                sh_type = 'GROUP'
+            elif s_type == 0x12:
+                sh_type = 'SYMTAB_SHNDX'
+            elif s_type == 0x13:
+                sh_type = 'NUM'
+            elif s_type == 0x60000000:
+                sh_type = 'LOOS'
+           # else:
+               # raise Exception("0x%x, Unknown section type!" % s_type)
+
+            if self.e_ident[4] == 1:
+                s_flags = struct.unpack('<l', self.data[start + 0x8 : start + 0x8 + 4])[0]
+                sh_addr = struct.unpack('<l', self.data[start + 0x0c : start + 0x0c + 4])[0]
+                sh_offset = struct.unpack('<l', self.data[start + 0x10 : start + 0x10 + 4])[0]
+                sh_size = struct.unpack('<l', self.data[start + 0x14 : start + 0x14 + 4])[0]
+                sh_link = struct.unpack('<l', self.data[start + 0x18 : start + 0x18 + 4])[0]
+                sh_info = struct.unpack('<l', self.data[start + 0x1C : start + 0x1C + 4])[0]
+                sh_addralign = struct.unpack('<l', self.data[start + 0x20 : start + 0x20 + 4])[0]
+                sh_entsize = struct.unpack('<l', self.data[start + 0x24 : start + 0x24 + 4])[0]
+            else:
+                s_flags = struct.unpack('<Q', self.data[start + 0x8 : start + 0x8 + 8])[0]
+                sh_addr = struct.unpack('<Q', self.data[start + 0x10 : start + 0x10 + 8])[0]
+                sh_offset = struct.unpack('<Q', self.data[start + 0x18 : start + 0x18 + 8])[0]
+                sh_size = struct.unpack('<Q', self.data[start + 0x20 : start + 0x20 + 8])[0]
+                sh_link = struct.unpack('<l', self.data[start + 0x28 : start + 0x28 + 4])[0]
+                sh_info = struct.unpack('<l', self.data[start + 0x2C : start + 0x2C + 4])[0]
+                sh_addralign = struct.unpack('<Q', self.data[start + 0x30 : start + 0x30 + 8])[0]
+                sh_entsize = struct.unpack('<Q', self.data[start + 0x38 : start + 0x38 + 8])[0]
+            
+            start = start + step
+            count = count + 1
+
+            sh_name = self.help_print_string(shstrtab + s_name)
+            self.section_header_list.append({"sh_name" : sh_name, "sh_type" : sh_type, "sh_flags" : s_flags,
+                                    "sh_addr" : sh_addr, "sh_offset" : sh_offset, "sh_size" : sh_size,
+                                    "sh_link" : sh_link, "sh_info" : sh_info, "sh_addralign" : sh_addralign,
+                                    "sh_entsize" : sh_entsize})
+
+    def section_header_print(self):
+        print('Section Headers')
+        print('  [Nr] ' + 'Name'.ljust(20) + 'Type'.ljust(20) + 'Address'.ljust(20) + 'Offset'.ljust(20))
+        print('       ' + 'Size'.ljust(20) + 'EntSize'.ljust(20) + 'Flags'.ljust(10) + 'Link'.ljust(10) + 'Info'.ljust(10)
+                        + 'Align'.ljust(20))
+
+        count = 0
+        for cur in self.section_header_list:
+            print('  [%2d] ' % count + cur['sh_name'].ljust(20) + cur['sh_type'].ljust(20) + ('%016x' % cur['sh_addr']).ljust(20)
+                 + ('%08x' % cur['sh_offset']).ljust(20))
+            print('       ' + ('%016x' % cur['sh_entsize']).ljust(20) + ('%016x' % cur['sh_size']).ljust(20) 
+                 + ('%08x' % cur['sh_flags']).ljust(10) + ('%08x' % cur['sh_link']).ljust(10)
+                 + ('%08x' % cur['sh_info']).ljust(10) + ('%08x' % cur['sh_addralign']).ljust(10))
+            count = count + 1
+
+    def dynamic_section_parser(self):
+        self.dynamic_section_list = []
+        self.dynamic_section_offset = 0
+        self.dynamic_section_count = 0
+        self.dynamic_strtab = 0
+
+        p_offset = -1
+        for program in self.program_header_list:
+            if program['p_type'] == 'DYNAMIC':
+                p_offset = program['p_offset']
+                break;
+        if p_offset == -1:
+            raise Exception("Dynamic section not found!")
+
+        if self.e_ident[4] == 1:
+            step = 8
+        else:
+            step = 16
+
+        start = p_offset
+        self.dynamic_section_offset = p_offset
+
+        while True:
+            if self.e_ident[4] == 1:
+                tag = struct.unpack('<l', self.data[start : start + 4])[0]
+                value = struct.unpack('<l', self.data[start + 4: start + 8])[0]
+            else:
+                tag = struct.unpack('<Q', self.data[start : start + 8])[0]
+                value = struct.unpack('<Q', self.data[start + 8: start + 8 + 8])[0]
+
+            if tag == 5:
+                self.dynamic_strtab = value
+                s_type = 'STRTAB'
+                break
+            if tag == 0:
+                break
+
+            start = start + step
+
+        start = p_offset
+        self.dynamic_section_count = 0
+        while True:
+            self.dynamic_section_count = self.dynamic_section_count + 1
+            if self.e_ident[4] == 1:
+                tag = struct.unpack('<l', self.data[start : start + 4])[0]
+                value = struct.unpack('<l', self.data[start + 4: start + 8])[0]
+            else:
+                tag = struct.unpack('<Q', self.data[start : start + 8])[0]
+                value = struct.unpack('<Q', self.data[start + 8: start + 8 + 8])[0]
+            
+            s_type = ''
+            name = ''
+            if(tag == 0):
+                s_type = 'NULL'
+            elif(tag == 1):
+                s_type = 'NEEDED'
+                name = self.help_print_string(self.dynamic_strtab + tag)
+            elif(tag == 2):
+                s_type = 'PLTRELSZ'
+            elif(tag == 3):
+                s_type = 'PLTGOT'
+            elif(tag == 4):
+                s_type = 'HASH'
+            elif(tag == 5):
+                self.dynamic_strtab = value
+                s_type = 'STRTAB'
+            elif(tag == 6):
+                s_type = 'SYMTAB'
+            elif(tag == 7):
+                s_type = 'RELA'
+            elif(tag == 8):
+                s_type = 'RELASZ'
+            elif(tag == 9):
+                s_type = 'RELAENT'
+            elif(tag == 10):
+                s_type = 'STRSZ'
+            elif(tag == 11):
+                s_type = 'SYMENT'
+            elif(tag == 12):
+                s_type = 'INIT'
+            elif(tag == 13):
+                s_type = 'FINI'
+            elif(tag == 14):
+                s_type = 'SONAME'
+            elif(tag == 15):
+                s_type = 'RPATH'
+            elif(tag == 16):
+                s_type = 'SYMBOLIC'
+            elif(tag == 17):
+                s_type = 'REL'
+            elif(tag == 18):
+                s_type = 'ELSZ'
+            elif(tag == 19):
+                s_type = 'RELENT'
+            elif(tag == 20):
+                s_type = 'PLTREL'
+            elif(tag == 21):
+                s_type = 'DEBUG'
+            elif(tag == 22):
+                s_type = 'TEXTREL'
+            elif(tag == 23):
+                s_type = 'JMPREL'
+            elif(tag == 24):
+                s_type = 'BIND_NOW'
+            elif(tag == 25):
+                s_type = 'INIT_ARRAY'
+            elif(tag == 26):
+                s_type = 'FINI_ARRAY'
+            elif(tag == 27):
+                s_type = 'INIT_ARRAYSZ'
+            elif(tag == 28):
+                s_type = 'FINI_ARRAYSZ'
+            elif(tag == 29):
+                s_type = 'RUNPATH'
+            elif(tag == 30):
+                s_type = 'FLAGS'
+            elif(tag == 31):
+                s_type = 'ENCODING'
+            elif(tag == 0x000000006ffffef5):
+                s_type = 'GNU_HASH'
+            elif(tag == 0x000000006ffffffb):
+                s_type = 'FLAGS_1'
+            elif(tag == 0x000000006ffffffe):
+                s_type = 'VERNEED'
+            elif(tag == 0x000000006fffffff):
+                s_type = 'VERNEEDNUM'
+            elif(tag == 0x000000006ffffff0):
+                s_type = 'VERSYM'
+            elif(tag == 0x000000006ffffff9):
+                s_type = 'RELACOUNT'
+            else:
+                s_type = 'NULL'
+                
+            self.dynamic_section_list.append({'tag':tag, 'type':s_type, 'val':value, 'name':name})
+
+            if(tag == 0):
+                break
+            start = start + step
+
+
+    def dynamic_section_print(self):
+        print('Dynamic section at offset 0x%x contains %d entries' % (self.dynamic_section_offset, self.dynamic_section_count)) 
+        print('  Tag'.ljust(20) + 'Type'.ljust(20) + 'Name/Value')
+            
+        for cur in self.dynamic_section_list:
+            print (('  %016x' % cur['tag']).ljust(20) + cur['type'].ljust(20) + '0x%x' % cur['val'] + ' ' +  cur['name'])
+
+    def help_print_string(self, offset):
+        res = ''
+        for cur in self.data[offset:]:
+            if cur == 0:
+                break
+            res = res + chr(cur)
+        return res
 
 def main():
     parser = argparse.ArgumentParser(prog = "myreadelf")
     parser.add_argument('-H', action = 'store_true', default = False)
+    parser.add_argument('-P', action = 'store_true', default = False)
     parser.add_argument('-S', action = 'store_true', default = False)
+    parser.add_argument('-D', action = 'store_true', default = False)
     parser.add_argument('filename')
     args = parser.parse_args()
 
@@ -255,7 +519,12 @@ def main():
 
     if(args.H):
         elf_object.header_print()
-    elf_object.program_header_print()
+    if(args.P):
+        elf_object.program_header_print()
+    if(args.S):
+        elf_object.section_header_print()
+    if(args.D):
+        elf_object.dynamic_section_print()
 
 if __name__ == "__main__":
     main()
