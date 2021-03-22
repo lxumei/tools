@@ -14,6 +14,7 @@ class Elf:
         self.program_header_parser()
         self.section_header_parser()
         self.dynamic_section_parser()
+        self.dynsym_parser()
 
     def read_elf(self):
         f = open(self.filename, 'rb')
@@ -498,6 +499,152 @@ class Elf:
         for cur in self.dynamic_section_list:
             print (('  %016x' % cur['tag']).ljust(20) + cur['type'].ljust(20) + '0x%x' % cur['val'] + ' ' +  cur['name'])
 
+    
+    def dynsym_parser(self):
+        self.dynsym_offset = 0
+        self.dynsym_list = []
+        self.dynsym_size = 0
+        self.dynsym_count = 0
+        self.dynstr_offset = 0
+        for section in self.section_header_list:
+            if section['sh_name'] == '.dynsym' and section['sh_type'] == 'DYNSYM':
+                self.dynsym_offset = section['sh_offset']
+                self.dynsym_size = section['sh_size']
+                break
+
+        if self.dynsym_offset == 0:
+            raise Exception('.dynsym not found')
+
+        for section in self.section_header_list:
+            if section['sh_name'] == '.dynstr':
+                self.dynstr_offset = section['sh_offset']
+                break
+
+        if self.dynstr_offset == 0:
+            raise Exception('.dynstr not found')
+
+        if self.e_ident[4] == 1:
+            step = 4 + 4 + 4 + 1 + 1 + 2
+        else:
+            step = 4 + 1 + 1 + 2 + 8 + 8
+
+        start = self.dynsym_offset
+        size = 0
+        while size < self.dynsym_size:
+            if self.e_ident[4] == 1:
+                pass
+            else:
+                name = struct.unpack('<l', self.data[start + size : start + size + 4])[0]
+                info = struct.unpack('<B', self.data[start + size + 4 : start + size + 5])[0]
+                other = struct.unpack('<B', self.data[start + size + 5 : start + size + 6])[0]
+                shndx = struct.unpack('<H', self.data[start + size + 6 : start + size + 8])[0]
+                st_value = struct.unpack('<Q', self.data[start + size + 8 : start + size + 16])[0]
+                st_size = struct.unpack('<Q', self.data[start + size + 16 : start + size + 24])[0]
+
+            sst_type = info & 0xf 
+            if sst_type == 0:
+                st_type = 'NOTYPE'
+            elif sst_type == 1:
+                st_type = 'OBJECT'
+            elif sst_type == 2:
+                st_type = 'FUNC'
+            elif sst_type == 3:
+                st_type = 'SECTION'
+            elif sst_type == 4:
+                st_type = 'FILE'
+            elif sst_type == 5:
+                st_type = 'COMMON'
+            elif sst_type == 6:
+                st_type = 'TLS'
+            elif sst_type == 10:
+                st_type = 'LOOPS'
+            elif sst_type == 12:
+                st_type == 'HIOS'
+            elif sst_type == 13:
+                st_type = 'LOPROC'
+            elif sst_type == 14:
+                st_type = 'SPARC_REGISTER'
+            elif sst_type == 15:
+                st_type = 'HIPROC'
+            else:
+                st_type = sst_type
+
+            sst_bind = info >> 4
+            if sst_bind == 0:
+                st_bind = 'LOCAL'
+            elif sst_bind == 1:
+                st_bind = 'GLOBAL'
+            elif sst_bind == 2:
+                st_bint = 'WEAK' 
+            elif sst_bind == 10:
+                st_bint = 'LOOS'
+            elif sst_bind == 12:
+                st_bint = 'HIOS'
+            elif sst_bind == 13:
+                st_bint = 'LOPROC'
+            elif sst_bind == 15:
+                st_bint = 'HIPROC'
+            else:
+                st_bint = str(sst_bind)
+
+            sst_vis = other & 0x3
+            if sst_vis == 0:
+                st_vis = 'DEFAULT'
+            elif sst_vis == 1:
+                st_vis = 'INTERNAL'
+            elif sst_vis == 2:
+                st_vis  = 'HIDDEN'
+            elif sst_vis == 3:
+                st_vis = 'PROTECTED'
+            elif sst_vis == 4:
+                st_vis = 'EXPORTED'
+            elif sst_vis == 5:
+                st_vis = 'SINGLETON'
+            elif sst_vis == 6:
+                st_vis = 'ELIMINATE'
+            else:
+                st_vis = str(sst_vis)
+
+            sst_shndx = shndx 
+            if sst_shndx == 0:
+                st_shndx = 'UNDEF'
+            elif sst_shndx == 0xff00:
+                st_shndx = 'LORESERVE'
+            elif sst_shndx == 0xff00:
+                st_shndx = 'LOPROC'
+            elif sst_shndx == 0xff01:
+                st_shndx = 'AFTER' 
+            elif sst_shndx == 0xff02:
+                st_shndx = 'AMD64_LCOMMON'
+            elif sst_shndx == 0xff1f:
+                st_shndx = 'HIPROC'
+            elif sst_shndx == 0xff20:
+                st_shndx = 'LOOS'
+            elif sst_shndx == 0xff3f:
+                st_shndx = 'LOSUNW'
+            elif sst_shndx == 0xfff1:
+                st_shndx = 'ABS' 
+            elif sst_shndx == 0xfff2:
+                st_shndx = 'COMMON'
+            elif sst_shndx == 0xffff:
+                st_shndx = 'XINDEX'
+            else:
+                st_shndx = str(shndx)
+
+            self.dynsym_list.append({"st_id" : self.dynsym_count, "st_value":st_value, "st_size":st_size, "st_type":st_type, "st_bind":st_bind,
+                "st_vis":st_vis, "st_shndx":st_shndx, "st_name":self.help_print_string(self.dynstr_offset + name)})
+
+            size += step
+            self.dynsym_count += 1
+
+
+    def dynsym_print(self):
+        print("Symbol table '.dynsym' contains %d entries:" % self.dynsym_count)
+        print(' ' + 'Num'.ljust(5) + 'Value'.ljust(20) + 'Size'.ljust(8) + 'Type'.ljust(10) + 'Bind'.ljust(10) + 'Ndx'.ljust(10) + 'Name')
+        for cur in self.dynsym_list:
+            print(' ' + str(cur['st_id']).ljust(5) + ('%016x'%cur['st_value']).ljust(20) + ('%d'%cur['st_size']).ljust(8) 
+                  + cur['st_type'].ljust(10) + cur['st_bind'].ljust(10) + cur['st_shndx'].ljust(10) + cur['st_name'])
+
     def help_print_string(self, offset):
         res = ''
         for cur in self.data[offset:]:
@@ -512,6 +659,7 @@ def main():
     parser.add_argument('-P', action = 'store_true', default = False)
     parser.add_argument('-S', action = 'store_true', default = False)
     parser.add_argument('-D', action = 'store_true', default = False)
+    parser.add_argument('-s', action = 'store_true', default = False)
     parser.add_argument('filename')
     args = parser.parse_args()
 
@@ -525,6 +673,8 @@ def main():
         elf_object.section_header_print()
     if(args.D):
         elf_object.dynamic_section_print()
+    if(args.s):
+        elf_object.dynsym_print()
 
 if __name__ == "__main__":
     main()
