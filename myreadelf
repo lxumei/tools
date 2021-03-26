@@ -15,6 +15,7 @@ class Elf:
         self.section_header_parser()
         self.dynamic_section_parser()
         self.dynsym_parser()
+        self.rela_parser()
 
     def read_elf(self):
         f = open(self.filename, 'rb')
@@ -645,21 +646,111 @@ class Elf:
             print(' ' + str(cur['st_id']).ljust(5) + ('%016x'%cur['st_value']).ljust(20) + ('%d'%cur['st_size']).ljust(8) 
                   + cur['st_type'].ljust(10) + cur['st_bind'].ljust(10) + cur['st_shndx'].ljust(10) + cur['st_name'])
 
+    def rela_parser(self):
+        self.rela_type_x32 = {}
+        self.rela_type_x64 = {} 
+        self.rela_list = []
+
+        self.rela_type_x64[0] = 'R_AMD64_NONE'
+        self.rela_type_x64[1] = 'R_AMD64_64'
+        self.rela_type_x64[2] = 'R_AMD64_PC32'
+        self.rela_type_x64[3] = 'R_AMD64_GOT32'
+        self.rela_type_x64[4] = 'R_AMD64_PLT32'
+        self.rela_type_x64[5] = 'R_AMD64_COPY'
+        self.rela_type_x64[6] = 'R_AMD64_GLOB_DAT'
+        self.rela_type_x64[7] = 'R_AMD64_JUMP_SLOT'
+        self.rela_type_x64[8] = 'R_AMD64_RELATIVE'
+        self.rela_type_x64[9] = 'R_AMD64_GOTPCREL'
+        self.rela_type_x64[10] = 'R_AMD64_32'
+        self.rela_type_x64[11] = 'R_AMD64_32S'
+        self.rela_type_x64[12] = 'R_AMD64_16'
+        self.rela_type_x64[13] = 'R_AMD64_PC16'
+        self.rela_type_x64[14] = 'R_AMD64_8'
+        self.rela_type_x64[15] = 'R_AMD64_8'
+       
+        if self.e_class == 1:
+            cur_rela_type = self.rela_type_x32
+        
+        if self.e_class == 2:
+            cur_rela_type = self.rela_type_x64
+
+        for sec in self.section_header_list:
+            if sec['sh_name'].startswith('.rela'):
+                self.rela_child_parser(sec, cur_rela_type)
+    
+    def rela_child_parser(self, sec, rela_type ):
+        size = sec['sh_size']
+
+        if self.e_class == 1:
+            ais = 0x000000ff
+            step = 12
+            total = size / step
+
+        if self.e_class == 2:
+            ais = 0x00000000ffffffff
+            step = 24
+            total = size / step 
+
+        self.rela_list.append({'name':sec['sh_name'], 'offset':sec['sh_offset'], 'count':total})
+        start = sec['sh_offset']
+        count = 0
+        while count < total:
+            if self.e_class == 1:
+                addr = struct.unpack('<L', self.data[start : start + 4])[0]
+                info = struct.unpack('<L', self.data[start + 4 : start + 8])[0]
+                addend = struct.unpack('<l', self.data[start + 8 : start + 12])[0]
+                sym = info >> 8
+            if self.e_class == 2:
+                addr = struct.unpack('<Q', self.data[start : start + 8])[0]
+                info = struct.unpack('<Q', self.data[start + 8 : start + 16])[0]
+                addend = struct.unpack('<q', self.data[start + 16 : start + 24])[0]
+                sym = info >> 32
+            
+            dynsym = self.dynsym_list[sym]
+
+            if sym == 0:
+                value = ''
+                st_name = addend
+            else:
+                value = sym
+                st_name = dynsym['st_name']
+
+            self.rela_list.append({'offset' : addr, 'info' : info, 'type' : rela_type[info & ais], 'value':value , 'rela_name': st_name})
+
+            count = count + 1
+            start = start + step
+
+    def rela_print(self):
+        for cur in self.rela_list:
+            if 'name' in cur:
+                print("\nRelocation section %s at offset 0x%x contains %d entries:" % (cur['name'], cur['offset'], cur['count'])) 
+                print('Offset'.ljust(20) + 'Info'.ljust(20) + 'Type'.ljust(20) + 'Sym. Value'.ljust(20) + 'Sym. Name + Addend'.ljust(20))
+            else:
+                if cur['value'] != '':
+                        value = ('%016x' % cur['value']).ljust(20)
+                        rela_name = cur['rela_name']
+                else:
+                        value = ''.ljust(20)
+                        rela_name = ('%x' % cur['rela_name']).ljust(20)
+                print(('%016x'%cur['offset']).ljust(20) + ('%016x'%cur['info']).ljust(20) + cur['type'].ljust(20) + value + rela_name)
+
     def help_print_string(self, offset):
         res = ''
         for cur in self.data[offset:]:
             if cur == 0:
                 break
             res = res + chr(cur)
-        return res
+            
+        return res 
 
 def main():
     parser = argparse.ArgumentParser(prog = "myreadelf")
-    parser.add_argument('-H', action = 'store_true', default = False)
-    parser.add_argument('-P', action = 'store_true', default = False)
-    parser.add_argument('-S', action = 'store_true', default = False)
-    parser.add_argument('-D', action = 'store_true', default = False)
-    parser.add_argument('-s', action = 'store_true', default = False)
+    parser.add_argument('-H', action = 'store_true', default = False) #ELF header
+    parser.add_argument('-P', action = 'store_true', default = False) #Program header
+    parser.add_argument('-S', action = 'store_true', default = False) #Section header
+    parser.add_argument('-D', action = 'store_true', default = False) #dynamic section
+    parser.add_argument('-s', action = 'store_true', default = False) #symbol table
+    parser.add_argument('-r', action = 'store_true', default = False) #relocation section
     parser.add_argument('filename')
     args = parser.parse_args()
 
@@ -675,6 +766,8 @@ def main():
         elf_object.dynamic_section_print()
     if(args.s):
         elf_object.dynsym_print()
+    if(args.r):
+        elf_object.rela_print()
 
 if __name__ == "__main__":
     main()

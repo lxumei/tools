@@ -41,7 +41,7 @@ void quickSort(vector<int> &nums, int left, int right){
     if(left >= right)
         return;
     
-    int partition_index = partition2(nums, left, right);
+    int partition_index = partition1(nums, left, right);
     quickSort(nums, left, partition_index - 1);
     quickSort(nums, partition_index + 1, right);
 }
