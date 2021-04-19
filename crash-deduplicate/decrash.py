@@ -11,10 +11,10 @@ log_file = 'crash-log'
 uniq_crash_hash = []
 stack_trace_number = 5
 
-#./decrash.py -c crash_dir -t path/to/target args/of/target
+#./decrash.py -i crash_dir -t path/to/target args/of/target
 def usage():
     print("usage:")
-    print(" ./decrash.py -c crash_dir -t path/to/target args/of/target")
+    print(" ./decrash.py -i crash_dir -t path/to/target args/of/target")
     sys.exit(0)
 
 def input_parser():
@@ -38,8 +38,8 @@ def input_parser():
 
 
 def uniq_crash_determine():
-    f = open(log_file, 'r').readlines()
-    lines = f,redalines()
+    f = open(log_file, 'r')
+    lines = f.readlines()
     f.close()
     new_lines =[]
     for i in range(0, len(lines)):
@@ -89,6 +89,7 @@ def run_target_with_gdb(target_path, target_args, target_crash):
         target_args = "r " + target_args.replace('@@', target_crash)
     else:
         target_args = "r " + target_args + ' < ' + target_crash
+
     f = open("/tmp/.script.py", "w")
     script = ('''import os
 import time
@@ -127,7 +128,7 @@ gdb.execute(\'quit\')
             if(w_pid > 0):
                 if(uniq_crash_determine()):   #unique
                     print("\033[32m" + "[+] U " + target_crash  + "\033[0m")
-                    os.system("cat %s" % (log_file))
+                    #os.system("cat %s" % (log_file))
                 else:   #duplicate
                     print("\033[91m" + "[+] D " + target_crash  + "\033[0m")
                 os.remove(log_file)
