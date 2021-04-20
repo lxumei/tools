@@ -1,0 +1,2 @@
+(1) ./decrash.py -i crash_dir -t gnuplot
+(2) ./decrash.py -i crash_dir/nocrash -t gnuplot
