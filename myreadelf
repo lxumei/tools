@@ -508,7 +508,7 @@ class Elf:
         self.dynsym_count = 0
         self.dynstr_offset = 0
         for section in self.section_header_list:
-            if section['sh_name'] == '.dynsym' and section['sh_type'] == 'DYNSYM':
+            if section['sh_name'] == '.dynsym':
                 self.dynsym_offset = section['sh_offset']
                 self.dynsym_size = section['sh_size']
                 break
