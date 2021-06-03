@@ -47,7 +47,7 @@ def uniq_crash_determine():
             new_lines.append(lines[i])
         else:
             new_lines[-1] = new_lines[-1].strip('\n') + lines[i]
-    
+
     stack_number = 0
     res = addr = fun = source = lnumber = ''
     for line in new_lines:
