@@ -293,13 +293,5 @@ static const u8* main_payload_aarch64 =
 ".AFL_SHM_ENV:\n"
 "  .asciz \"" SHM_ENV_VAR "\"\n"
 "\n"
-".align 3\n"
-".LSTR0:\n"
-"	.string \"./flag\""
-"\n"
-".align 3\n"
-".LSTR1:\n"
-"	.string \"child_pid = %d\\n\""
-"\n"
 "/* --- END --- */\n"
 "\n";
